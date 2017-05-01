@@ -25,7 +25,7 @@ const (
 	// this is my local testnet node, replace it with your own close by.
 	// Random internet testnet nodes usually work but sometimes don't, so
 	// maybe I should test against different versions out there.
-	hardHeight = 1111111 // height to start at if not specified
+	hardHeight = 1 // height to start at if not specified
 )
 
 // variables for a goodelivery session
@@ -97,9 +97,10 @@ func setConfig(lc *LitConfig) {
 			lc.spvHost = lc.spvHost + ":8444"
 		}
 	} else {
-		lc.Params = &chaincfg.TestNet3Params
+		lc.Params = &chaincfg.VertcoinTestNetParams
+		lc.birthblock = 1
 		if !strings.Contains(lc.spvHost, ":") {
-			lc.spvHost = lc.spvHost + ":18333"
+			lc.spvHost = lc.spvHost + ":15889"
 		}
 	}
 
