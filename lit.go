@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vertcoin/btcd/chaincfg"
-	"github.com/vertcoin/lit/litbamf"
-	"github.com/vertcoin/lit/litrpc"
-	"github.com/vertcoin/lit/lnutil"
-	"github.com/vertcoin/lit/qln"
+	"github.com/adiabat/btcd/chaincfg"
+	"github.com/mit-dci/lit/litbamf"
+	"github.com/mit-dci/lit/litrpc"
+	"github.com/mit-dci/lit/lnutil"
+	"github.com/mit-dci/lit/qln"
 )
 
 const (

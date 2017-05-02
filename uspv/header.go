@@ -11,10 +11,12 @@ import (
 	"math/big"
 	"os"
 	"time"
+	"bytes"
 
 	"github.com/adiabat/btcd/blockchain"
 	"github.com/adiabat/btcd/chaincfg"
 	"github.com/adiabat/btcd/wire"
+	"github.com/adiabat/btcd/chaincfg/chainhash"
 )
 
 // blockchain settings.  These are kindof bitcoin specific, but not contained in
@@ -30,14 +32,16 @@ const (
 //	maxRetargetTimespan = int64(targetTimespan * maxDiffAdjust)
 )
 
+func calcPoW(header wire.BlockHeader, p *chaincfg.Params) chainhash.Hash {
+	buf := bytes.NewBuffer(make([]byte, 0, wire.MaxBlockHeaderPayload))
+	_ = wire.WriteBlockHeader(buf, 0, &header)
+	
+	return p.PoWFunction(buf.Bytes())
+}
+
 /* checkProofOfWork verifies the header hashes into something
 lower than specified by the 4-byte bits field. */
 func checkProofOfWork(header wire.BlockHeader, p *chaincfg.Params) bool {
-	// litecoin PoW not yet implemented; just accept anything for now
-	if p.Name == "litetest4" {
-		return true
-	}
-
 	target := blockchain.CompactToBig(header.Bits)
 
 	// The target must more than 0.  Why can you even encode negative...
@@ -52,7 +56,7 @@ func checkProofOfWork(header wire.BlockHeader, p *chaincfg.Params) bool {
 		return false
 	}
 	// The header hash must be less than the claimed target in the header.
-	blockHash := header.BlockHash()
+	blockHash := calcPoW(header, p)
 	hashNum := blockchain.HashToBig(&blockHash)
 	if hashNum.Cmp(target) > 0 {
 		log.Printf("block hash %064x is higher than "+
@@ -185,10 +189,10 @@ func CheckHeader(r io.ReadSeeker, height, startheight int32, p *chaincfg.Params)
 	}
 
 	// check if there's a valid proof of work.  That whole "Bitcoin" thing.
-	/*if !checkProofOfWork(cur, p) {
+	if !checkProofOfWork(cur, p) {
 		log.Printf("Block %d Bad proof of work.\n", height)
 		return false
-	}*/
+	}
 
 	return true // it must have worked if there's no errors and got to the end.
 }
