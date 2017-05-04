@@ -107,7 +107,6 @@ func CheckHeader(r io.ReadSeeker, height, startheight int32, p *chaincfg.Params)
   }
   
   if cur.Bits != rightBits {
-      log.Printf("%x %x", cur.Bits, rightBits)
 			log.Printf("Block %d %s incorrect difficuly.  Read %x, expect %x\n",
 			height, cur.BlockHash().String(), cur.Bits, rightBits)
 			return false
