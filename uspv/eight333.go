@@ -303,7 +303,7 @@ func (s *SPVCon) IngestHeaders(m *wire.MsgHeaders) (bool, error) {
 				tip, resphdr.BlockHash().String())
 		}
     
-    _, err = s.headerFile.Seek(int64(80*(tip)), os.SEEK_SET)
+    _, err = s.headerFile.Seek(int64(80*(tip - s.headerStartHeight)), os.SEEK_SET)
     if err != nil {
       log.Printf(err.Error())
       return false, err
