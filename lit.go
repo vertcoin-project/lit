@@ -116,7 +116,7 @@ func setConfig(lc *LitConfig) {
 		}
 	} else {
 		lc.Params = &chaincfg.VertcoinTestNetParams
-		lc.birthblock = 1
+		lc.birthblock = 0
 		if !strings.Contains(lc.spvHost, ":") {
 			lc.spvHost = lc.spvHost + ":15889"
 		}
