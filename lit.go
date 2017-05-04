@@ -34,6 +34,7 @@ type LitConfig struct {
 	regTest, reSync, hard bool // flag to set networks
 	bc2Net                bool
 	lt4Net                bool
+  tvtcNet               bool
 	verbose               bool
 	birthblock            int32
 	rpcport               uint16
@@ -55,6 +56,7 @@ func setConfig(lc *LitConfig) {
 	regtestptr := flag.Bool("reg", false, "use regtest (not testnet3)")
 	bc2ptr := flag.Bool("bc2", false, "use bc2 network (not testnet3)")
 	lt4ptr := flag.Bool("lt4", false, "use litecoin-testnet 4 (not testnet3)")
+  tvtcptr := flag.Bool("tvtc", false, "use Vertcoin testnet")
 
 	resyncprt := flag.Bool("resync", false, "force resync from given tip")
 
@@ -72,6 +74,7 @@ func setConfig(lc *LitConfig) {
 	lc.regTest = *regtestptr
 	lc.bc2Net = *bc2ptr
 	lc.lt4Net = *lt4ptr
+  lc.tvtcNet = *tvtcptr
 	lc.reSync = *resyncprt
 	lc.hard = !*easyptr
 	lc.verbose = *verbptr
@@ -85,41 +88,24 @@ func setConfig(lc *LitConfig) {
 	//		lc.spvHost = "lit3.co"
 	//	}
 
-	// soon clean this up into multi-wallet
-
-	if lc.regTest && lc.bc2Net {
-		log.Fatal("error: can't have -bc2 and -reg")
-	}
-	if lc.lt4Net && lc.bc2Net {
-		log.Fatal("error: can't have -lt4 and -bc2")
-	}
-	if lc.regTest && lc.lt4Net {
-		log.Fatal("error: can't have -lt4 and -reg")
-	}
-
 	if lc.lt4Net {
 		lc.Params = &chaincfg.LiteCoinTestNet4Params
 		lc.birthblock = 47295
-		if !strings.Contains(lc.spvHost, ":") {
-			lc.spvHost = lc.spvHost + ":19335"
-		}
 	} else if lc.regTest {
 		lc.Params = &chaincfg.RegressionNetParams
 		lc.birthblock = 120
-		if !strings.Contains(lc.spvHost, ":") {
-			lc.spvHost = lc.spvHost + ":18444"
-		}
 	} else if lc.bc2Net {
 		lc.Params = &chaincfg.BC2NetParams
-		if !strings.Contains(lc.spvHost, ":") {
-			lc.spvHost = lc.spvHost + ":8444"
-		}
-	} else {
-		lc.Params = &chaincfg.VertcoinTestNetParams
+  } else if lc.tvtcNet {
+    lc.Params = &chaincfg.VertcoinTestNetParams
 		lc.birthblock = 0
-		if !strings.Contains(lc.spvHost, ":") {
-			lc.spvHost = lc.spvHost + ":15889"
-		}
+	} else {
+		lc.Params = &chaincfg.TestNet3Params
+		lc.birthblock = 100000
+	}
+  
+  if !strings.Contains(lc.spvHost, ":") {
+		lc.spvHost = lc.spvHost + ":" + lc.Params.DefaultPort
 	}
 
 	if lc.reSync && lc.birthblock == hardHeight {
