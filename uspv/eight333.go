@@ -302,6 +302,20 @@ func (s *SPVCon) IngestHeaders(m *wire.MsgHeaders) (bool, error) {
 				"Header %d - %s doesn't fit, dropping 100 headers.",
 				tip, resphdr.BlockHash().String())
 		}
+    
+    _, err = s.headerFile.Seek(int64(80*(tip)), os.SEEK_SET)
+    if err != nil {
+      log.Printf(err.Error())
+      return false, err
+    }
+    var cur wire.BlockHeader 
+    err = cur.Deserialize(s.headerFile)
+    if err != nil {
+      log.Printf("Couldn't find saved block tip")
+      return false, err
+    }
+    
+    
 	}
 	log.Printf("Headers to height %d OK.", tip)
 	return true, nil

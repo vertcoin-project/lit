@@ -119,7 +119,6 @@ func CheckHeader(r io.ReadSeeker, height, startheight int32, p *chaincfg.Params)
 		return false
 	}
 
-  log.Printf("Block %d OK!", height)
 	return true // it must have worked if there's no errors and got to the end.
 }
 
