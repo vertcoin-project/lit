@@ -167,21 +167,15 @@ func AdrStringToOutscript(adr string) ([]byte, error) {
 	var outScript []byte
 
 	// use HRP to determine network / wallet to use
-	_, adrData, err := bech32.Decode(adr)
-	if err == nil { // valid bech32 string
-		if len(adrData) != 20 {
-			return nil, fmt.Errorf("Address %s has %d byte payload, expect 20",
-				adr, len(adrData))
-		}
-		var adr160 [20]byte
-		copy(adr160[:], adrData)
-
-		outScript = lnutil.DirectWPKHScriptFromPKH(adr160)
-	} else {
+	outScript, err = bech32.SegWitAddressDecode(adr)
+	if err != nil { // valid bech32 string
 		// try for base58 address
 		// btcutil addresses don't really work as they won't tell you the
 		// network; you have to tell THEM the network, which defeats the point
 		// of having an address.  default to testnet only here
+    
+		// could work on adding more old-style addresses; for now use new bech32
+		// addresses for multi-wallet / segwit sends.
 		adr, err := btcutil.DecodeAddress(adr, &chaincfg.TestNet3Params)
 		if err != nil {
 			return nil, err
@@ -309,7 +303,8 @@ func (r *LitRPC) Address(args *AddressArgs, reply *AddressReply) error {
 		reply.LegacyAddresses[i] = oldadr.String()
 
 		// convert 20-byte PKH to a bech32 segwit v0 address
-		bech32adr := bech32.Encode(r.Node.SubWallet.Params().Bech32Prefix, a[:])
+		bech32adr, err := bech32.SegWitV0Encode(
+			r.Node.SubWallet.Params().Bech32Prefix, a[:])
 		if err != nil {
 			return err
 		}
