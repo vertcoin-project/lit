@@ -18,16 +18,16 @@ import (
   "github.com/adiabat/btcd/chaincfg/difficulty"
 )
 
-func calcPoW(header wire.BlockHeader, p *chaincfg.Params) chainhash.Hash {
+func calcPoW(header wire.BlockHeader, p *chaincfg.Params, height int32) chainhash.Hash {
 	buf := bytes.NewBuffer(make([]byte, 0, wire.MaxBlockHeaderPayload))
 	_ = wire.WriteBlockHeader(buf, 0, &header)
 	
-	return p.PoWFunction(buf.Bytes())
+	return p.PoWFunction(buf.Bytes(), height)
 }
 
 /* checkProofOfWork verifies the header hashes into something
 lower than specified by the 4-byte bits field. */
-func checkProofOfWork(header wire.BlockHeader, p *chaincfg.Params) bool {
+func checkProofOfWork(header wire.BlockHeader, p *chaincfg.Params, height int32) bool {
 	target := difficulty.CompactToBig(header.Bits)
 
 	// The target must more than 0.  Why can you even encode negative...
@@ -42,7 +42,7 @@ func checkProofOfWork(header wire.BlockHeader, p *chaincfg.Params) bool {
 		return false
 	}
 	// The header hash must be less than the claimed target in the header.
-	blockHash := calcPoW(header, p)
+	blockHash := calcPoW(header, p, height)
 	hashNum := blockchain.HashToBig(&blockHash)
 	if hashNum.Cmp(target) > 0 {
 		log.Printf("block hash %064x is higher than "+
@@ -99,24 +99,27 @@ func CheckHeader(r io.ReadSeeker, height, startheight int32, p *chaincfg.Params)
 	}
 
   // Check that the difficulty bits are correct
-  rightBits, err := p.DiffCalcFunction(r, height, startheight, p)
+  /*rightBits, err := p.DiffCalcFunction(r, height, startheight, p)
   if err != nil {
     log.Printf("Error calculating Block %d %s difficuly. %s\n",
     height, cur.BlockHash().String(), err.Error())
     return false
   }
   
-  if cur.Bits != rightBits {
+  if cur.Bits != rightBits && height >= 208301 {
 			log.Printf("Block %d %s incorrect difficuly.  Read %x, expect %x\n",
 			height, cur.BlockHash().String(), cur.Bits, rightBits)
 			return false
-	}
+	}*/
  
-	// check if there's a valid proof of work.  That whole "Bitcoin" thing.
-	if !checkProofOfWork(cur, p) {
-		log.Printf("Block %d Bad proof of work.\n", height)
-		return false
-	}
+	
+  // check if there's a valid proof of work.  That whole "Bitcoin" thing.
+	if height >= 347000 {
+    if !checkProofOfWork(cur, p, height) {
+      log.Printf("Block %d Bad proof of work.\n", height)
+      return false
+    }
+  }
 
 	return true // it must have worked if there's no errors and got to the end.
 }

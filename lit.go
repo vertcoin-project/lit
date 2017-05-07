@@ -35,6 +35,7 @@ type LitConfig struct {
 	bc2Net                bool
 	lt4Net                bool
   tvtcNet               bool
+  vtcNet                bool
 	verbose               bool
 	birthblock            int32
 	rpcport               uint16
@@ -57,6 +58,7 @@ func setConfig(lc *LitConfig) {
 	bc2ptr := flag.Bool("bc2", false, "use bc2 network (not testnet3)")
 	lt4ptr := flag.Bool("lt4", false, "use litecoin-testnet 4 (not testnet3)")
   tvtcptr := flag.Bool("tvtc", false, "use Vertcoin testnet")
+  vtcptr := flag.Bool("vtc", false, "use Vertcoin testnet")
 
 	resyncprt := flag.Bool("resync", false, "force resync from given tip")
 
@@ -75,6 +77,7 @@ func setConfig(lc *LitConfig) {
 	lc.bc2Net = *bc2ptr
 	lc.lt4Net = *lt4ptr
   lc.tvtcNet = *tvtcptr
+  lc.vtcNet = *vtcptr
 	lc.reSync = *resyncprt
 	lc.hard = !*easyptr
 	lc.verbose = *verbptr
@@ -99,9 +102,12 @@ func setConfig(lc *LitConfig) {
   } else if lc.tvtcNet {
     lc.Params = &chaincfg.VertcoinTestNetParams
 		lc.birthblock = 0
+  } else if lc.vtcNet {
+    lc.Params = &chaincfg.VertcoinParams
+    lc.birthblock = 690000
 	} else {
 		lc.Params = &chaincfg.TestNet3Params
-		lc.birthblock = 100000
+		lc.birthblock = 0
 	}
   
   if !strings.Contains(lc.spvHost, ":") {
