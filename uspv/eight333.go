@@ -221,11 +221,18 @@ func (s *SPVCon) IngestMerkleBlock(m *wire.MsgMerkleBlock) {
 	return
 }
 
-// IngestHeaders takes in a bunch of headers and appends them to the
-// local header file, checking that they fit.  If there's no headers,
-// it assumes we're done and returns false.  If it worked it assumes there's
-// more to request and returns true.
+// IngestHeaders takes in a bunch of headers, checks them,
+// and if they're OK, appends them to the loccal header file.
+// If there are no headers, it assumes we're done and returns false.
+// Otherwise it assumes there's more to request and returns true.
 func (s *SPVCon) IngestHeaders(m *wire.MsgHeaders) (bool, error) {
+
+	// headerChainLength is how many headers we give to the
+	// verification function.  In bitcoin you never need more than 2016 previous
+	// headers to figure out the validity of the next; some alcoins need more
+	// though, like 4K or so.
+	//	headerChainLength := 4096
+
 	gotNum := int64(len(m.Headers))
 	if gotNum > 0 {
 		log.Printf("got %d headers. Range:\n%s - %s\n",
@@ -237,9 +244,29 @@ func (s *SPVCon) IngestHeaders(m *wire.MsgHeaders) (bool, error) {
 	}
 
 	s.headerMutex.Lock()
+	// even though we will be doing a bunch without writing, should be
+	// OK performance-wise to keep it locked for this function duration,
+	// because verification is pretty quick.
 	defer s.headerMutex.Unlock()
 
-	var err error
+	tipheight := s.GetHeaderTipHeight()
+
+	tipheader, err := s.GetHeaderAtHeight(tipheight)
+	if err != nil {
+		return false, err
+	}
+	tiphash := tipheader.BlockHash()
+
+	// first, read our tip and see if the first thing we've gotten links up
+	if !m.Headers[0].PrevBlock.IsEqual(&tiphash) {
+		// reorg
+	}
+
+	// check all the headers
+	//	for n, curheader := range m.Headers {
+	//		worked := CheckHeader()
+	//	}
+
 	// seek to last header
 	_, err = s.headerFile.Seek(-80, os.SEEK_END)
 	if err != nil {
@@ -261,13 +288,25 @@ func (s *SPVCon) IngestHeaders(m *wire.MsgHeaders) (bool, error) {
 	// check first header returned to make sure it fits on the end
 	// of our header file
 	if !m.Headers[0].PrevBlock.IsEqual(&prevHash) {
-		// delete 100 headers if this happens!  Dumb reorg.
-		log.Printf("reorg? header msg doesn't fit. points to %s, expect %s",
+
+		// node is telling us about a header that doesn't fit.
+		// Try to find where it hooks in to; if it's in the last 100 blocks,
+		// then we'll re-org.  If the re-org is more than 100 blocks deep
+		// we should disconnect and crash.
+
+		log.Printf("header msg doesn't fit. points to %s, expect %s",
 			m.Headers[0].PrevBlock.String(), prevHash.String())
+
 		if endPos < 8160 {
 			// jeez I give up, back to genesis
 			s.headerFile.Truncate(160)
 		} else {
+			height, err := FindHeader(s.headerFile, *m.Headers[0])
+			log.Printf("header %s is back at height %d",
+				m.Headers[0].PrevBlock.String(), height)
+			if err != nil {
+				return false, err
+			}
 			err = s.headerFile.Truncate(endPos - 8000)
 			if err != nil {
 				return false, fmt.Errorf("couldn't truncate header file")
@@ -308,43 +347,45 @@ func (s *SPVCon) IngestHeaders(m *wire.MsgHeaders) (bool, error) {
 }
 
 func (s *SPVCon) AskForHeaders() error {
-	var hdr wire.BlockHeader
 	ghdr := wire.NewMsgGetHeaders()
 	ghdr.ProtocolVersion = s.localVersion
 
-	s.headerMutex.Lock() // start header file ops
-	info, err := s.headerFile.Stat()
+	tipheight := s.GetHeaderTipHeight()
+	fmt.Printf("got header tip height %d\n", tipheight)
+	// get tip header, as well as a few older ones (inefficient...?)
+	// yes, inefficient; really we should use "getheaders" and skip some of this
+
+	tipheader, err := s.GetHeaderAtHeight(tipheight)
 	if err != nil {
 		return err
 	}
-	headerFileSize := info.Size()
-	if headerFileSize == 0 || headerFileSize%80 != 0 { // header file broken
-		// try to fix it!
-		s.headerFile.Truncate(headerFileSize - (headerFileSize % 80))
-		log.Printf("ERROR: Header file not a multiple of 80 bytes. Truncating")
-	}
 
-	// seek to 80 bytes from end of file
-	ns, err := s.headerFile.Seek(-80, os.SEEK_END)
+	tHash := tipheader.BlockHash()
+	err = ghdr.AddBlockLocatorHash(&tHash)
 	if err != nil {
-		log.Printf("can't seek\n")
 		return err
 	}
 
-	log.Printf("sought to offset %d (should be near the end\n", ns)
+	backnum := int32(1)
 
-	// get header from last 80 bytes of file
-	err = hdr.Deserialize(s.headerFile)
-	if err != nil {
-		log.Printf("can't Deserialize")
-		return err
-	}
-	s.headerMutex.Unlock() // done with header file
+	// add more blockhashes in there if we're high enough
+	for tipheight > s.Param.StartHeight+backnum {
+		backhdr, err := s.GetHeaderAtHeight(tipheight - backnum)
+		if err != nil {
+			return err
+		}
+		backhash := backhdr.BlockHash()
 
-	cHash := hdr.BlockHash()
-	err = ghdr.AddBlockLocatorHash(&cHash)
-	if err != nil {
-		return err
+		err = ghdr.AddBlockLocatorHash(&backhash)
+		if err != nil {
+			return err
+		}
+		backnum++
+
+		// send the most recent 10 blockhashes, then get sparse
+		if backnum > 10 {
+			backnum <<= 2
+		}
 	}
 
 	log.Printf("get headers message has %d header hashes, first one is %s\n",
