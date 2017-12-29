@@ -1,15 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	flags "github.com/jessevdk/go-flags"
@@ -48,7 +44,6 @@ var (
 	defaultKeyFileName    = "privkey.hex"
 	defaultConfigFilename = "lit.conf"
 	defaultHomeDir        = os.Getenv("HOME")
-	defaultConfigFile     = filepath.Join(os.Getenv("HOME"), "/.lit/lit.conf")
 	defaultRpcport        = uint16(8001)
 )
 
@@ -75,7 +70,7 @@ func linkWallets(node *qln.LitNode, key *[32]byte, conf *config) error {
 
 	var err error
 	// try regtest
-	if conf.Reghost != "" {
+	if !lnutil.NopeString(conf.Reghost) {
 		p := &coinparam.RegressionNetParams
 		fmt.Printf("reg: %s\n", conf.Reghost)
 		err = node.LinkBaseWallet(key, 120, conf.ReSync, conf.Tower, conf.Reghost, p)
@@ -84,7 +79,7 @@ func linkWallets(node *qln.LitNode, key *[32]byte, conf *config) error {
 		}
 	}
 	// try testnet3
-	if conf.Tn3host != "" {
+	if !lnutil.NopeString(conf.Tn3host) {
 		p := &coinparam.TestNet3Params
 		err = node.LinkBaseWallet(
 			key, 1210000, conf.ReSync, conf.Tower,
@@ -94,7 +89,7 @@ func linkWallets(node *qln.LitNode, key *[32]byte, conf *config) error {
 		}
 	}
 	// try litecoin regtest
-	if conf.Litereghost != "" {
+	if !lnutil.NopeString(conf.Litereghost) {
 		p := &coinparam.LiteRegNetParams
 		err = node.LinkBaseWallet(key, 120, conf.ReSync, conf.Tower, conf.Litereghost, p)
 		if err != nil {
@@ -103,7 +98,7 @@ func linkWallets(node *qln.LitNode, key *[32]byte, conf *config) error {
 	}
 
 	// try litecoin testnet4
-	if conf.Lt4host != "" {
+	if !lnutil.NopeString(conf.Lt4host) {
 		p := &coinparam.LiteCoinTestNet4Params
 		err = node.LinkBaseWallet(
 			key, p.StartHeight, conf.ReSync, conf.Tower,
@@ -113,17 +108,17 @@ func linkWallets(node *qln.LitNode, key *[32]byte, conf *config) error {
 		}
 	}
 	// try vertcoin testnet
-	if conf.Tvtchost != "" {
+	if !lnutil.NopeString(conf.Tvtchost) {
 		p := &coinparam.VertcoinTestNetParams
 		err = node.LinkBaseWallet(
-			key, 0, conf.ReSync, conf.Tower,
+			key, 25000, conf.ReSync, conf.Tower,
 			conf.Tvtchost, p)
 		if err != nil {
 			return err
 		}
 	}
 	// try vertcoin mainnet
-	if conf.Vtchost != "" {
+	if !lnutil.NopeString(conf.Vtchost) {
 		p := &coinparam.VertcoinParams
 		err = node.LinkBaseWallet(
 			key, p.StartHeight, conf.ReSync, conf.Tower,
@@ -140,7 +135,6 @@ func main() {
 
 	conf := config{
 		LitHomeDir: defaultLitHomeDirName,
-		ConfigFile: defaultConfigFile,
 		Rpcport:    defaultRpcport,
 		TrackerURL: defaultTrackerURL,
 	}
@@ -149,95 +143,66 @@ func main() {
 	// file or the version flag was specified.  Any errors aside from the
 	// help message error can be ignored here since they will be caught by
 	// the final parse below.
+	usageMessage := fmt.Sprintf("Use %s -h to show usage", "./lit")
 	preconf := conf
 	preParser := newConfigParser(&preconf, flags.HelpFlag)
-	_, err := preParser.Parse()
-	if err != nil { // if there is some sort of error while parsing the CLI arguments
+	_, err := preParser.ParseArgs(os.Args)
+	if err != nil {
 		if e, ok := err.(*flags.Error); ok && e.Type == flags.ErrHelp {
-			fmt.Fprintln(os.Stderr, err)
-			log.Fatal(err)
+			fmt.Println(err)
 			return
-			// return nil, nil, err
 		}
 	}
 
-	// appName := filepath.Base(os.Args[0])
-	// appName = strings.TrimSuffix(appName, filepath.Ext(appName))
-	// usageMessage := fmt.Sprintf("Use %s -h to show usage", appName)
-	// if preconf.ShowVersion {
-	// 	fmt.Println(appName, "version", version())
-	// 	os.Exit(0)
-	// }
+	// Load config from file
+	parser := newConfigParser(&conf, flags.Default) //parse
 
-	// Load additional config from file
-	var configFileError error
-	parser := newConfigParser(&conf, flags.Default) // Single line command to read all the CLI params passed
-
-	// creates a directory in the absolute sense
-	_, err = os.Stat(preconf.LitHomeDir)
+	_, err = os.Stat(preconf.LitHomeDir) // create directory
+	if err != nil {
+		log.Println("Error while creating a directory")
+	}
 	if os.IsNotExist(err) {
+		// first time the guy is running lit, lets set tn3 to true
 		os.Mkdir(preconf.LitHomeDir, 0700)
-		fmt.Println("Creating a new config file")
+		log.Println("Creating a new config file")
 		err := createDefaultConfigFile(preconf.LitHomeDir) // Source of error
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating a "+
-				"default config file: %v\n", err)
+			log.Println("Error creating a default config file: %v\n")
+			log.Fatal(err)
 		}
 	}
 
-	// seems wrong / does nothing?
-	//	if err != nil {
-	//		fmt.Println("Error while creating a directory")
-	//		fmt.Println(err)
-	//	}
-
-	if !(preconf.ConfigFile != defaultConfigFile) {
-		if _, err := os.Stat(filepath.Join(filepath.Join(preconf.LitHomeDir), "lit.conf")); os.IsNotExist(err) {
-			if err != nil {
-				fmt.Println(err)
-			}
-			fmt.Println("Creating a new config file")
-			err1 := createDefaultConfigFile(filepath.Join(preconf.LitHomeDir)) // Source of error
-			if err1 != nil {
-				fmt.Fprintf(os.Stderr, "Error creating a "+
-					"default config file: %v\n", err)
-			}
-		}
-		preconf.ConfigFile = filepath.Join(filepath.Join(preconf.LitHomeDir), "lit.conf")
-		// lets parse the config file provided, if any
-		err := flags.NewIniParser(parser).ParseFile(preconf.ConfigFile)
+	if _, err := os.Stat(filepath.Join(filepath.Join(preconf.LitHomeDir), "lit.conf")); os.IsNotExist(err) {
+		// if there is no config file found over at the directory, create one
 		if err != nil {
-			_, ok := err.(*os.PathError)
-			if !ok {
-				fmt.Fprintf(os.Stderr, "Error parsing config file: %s\n",
-					err.Error())
-				log.Fatal(err)
-			}
-			configFileError = err
+			log.Println(err)
+		}
+		log.Println("Creating a new config file")
+		err := createDefaultConfigFile(filepath.Join(preconf.LitHomeDir)) // Source of error
+		if err != nil {
+			log.Fatal(err)
+			return
 		}
 	}
 
-	// Parse command line options again to ensure they take precedence.
-	_, err = parser.Parse()
+	preconf.ConfigFile = filepath.Join(filepath.Join(preconf.LitHomeDir), "lit.conf")
+	// lets parse the config file provided, if any
+	err = flags.NewIniParser(parser).ParseFile(preconf.ConfigFile)
 	if err != nil {
-		// huh?
-		//		if e, ok := err.(*flags.Error); !ok || e.Type != flags.ErrHelp {
-		//		}
-		log.Fatal(err)
+		_, ok := err.(*os.PathError)
+		if !ok {
+			log.Fatal(err)
+		}
 	}
-
-	if configFileError != nil {
-		fmt.Printf("%s\n", configFileError.Error())
+	// Parse command line options again to ensure they take precedence.
+	_, err = parser.ParseArgs(os.Args) // returns invalid flags
+	if err != nil {
+		fmt.Println(usageMessage)
+		// no need to print the error as we already have
+		return
 	}
 
 	logFilePath := filepath.Join(conf.LitHomeDir, "lit.log")
-
-	// also does nothing
-	/*
-		if remainingArgs != nil {
-			//fmt.Printf("%v", remainingArgs)
-		}
-	*/
 
 	logfile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	defer logfile.Close()
@@ -296,63 +261,4 @@ func main() {
 	return
 	// New directory being created over at PWD
 	// conf file being created at /
-}
-
-func createDefaultConfigFile(destinationPath string) error {
-
-	// We assume sample config file path is same as binary TODO: change to ~/.lit/config/
-	path, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		return err
-	}
-	sampleConfigPath := filepath.Join(path, defaultConfigFilename)
-
-	// We generate a random user and password
-	randomBytes := make([]byte, 20)
-	_, err = rand.Read(randomBytes)
-	if err != nil {
-		return err
-	}
-	generatedRPCUser := base64.StdEncoding.EncodeToString(randomBytes)
-
-	_, err = rand.Read(randomBytes)
-	if err != nil {
-		return err
-	}
-	generatedRPCPass := base64.StdEncoding.EncodeToString(randomBytes)
-
-	src, err := os.Open(sampleConfigPath)
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	dest, err := os.OpenFile(filepath.Join(destinationPath, defaultConfigFilename),
-		os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return err
-	}
-	defer dest.Close()
-
-	// We copy every line from the sample config file to the destination,
-	// only replacing the two lines for rpcuser and rpcpass
-	reader := bufio.NewReader(src)
-	for err != io.EOF {
-		var line string
-		line, err = reader.ReadString('\n')
-		if err != nil && err != io.EOF {
-			return err
-		}
-
-		if strings.Contains(line, "rpcuser=") {
-			line = "rpcuser=" + generatedRPCUser + "\n"
-		} else if strings.Contains(line, "rpcpass=") {
-			line = "rpcpass=" + generatedRPCPass + "\n"
-		}
-
-		if _, err := dest.WriteString(line); err != nil {
-			return err
-		}
-	}
-	return nil
 }

@@ -46,7 +46,7 @@ func RPCListen(rpcl *LitRPC, port uint16) {
 
 	rpc.Register(rpcl)
 
-	listenString := fmt.Sprintf("localhost:%d", port)
+	listenString := fmt.Sprintf("0.0.0.0:%d", port)
 
 	http.Handle("/ws", websocket.Handler(serveWS))
 	log.Fatal(http.ListenAndServe(listenString, nil))
